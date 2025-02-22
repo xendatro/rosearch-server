@@ -49,65 +49,90 @@ async function getFollowingCount(id) {
 	return await get(`https://friends.roblox.com/v1/users/${id}/followings/count`)
 }
 
+async function getDetailedGameData(games) {
+	let gameIds = games.map((game) => game.id)
+  const n = 20
+  let i = 0
+  while (i < games.length) {
+    console.log(i, i+n)
+    let details = await get(`https://games.roblox.com/v1/games?universeIds=${gameIds.slice(i, i+n).toString()}`)
+    console.log("new iteration", details.data)
+    for (let x = 0; x < details.data.length; x++) {
+      let gameDetails = details.data[x]
+      games[i+x].universeId = gameDetails.id
+      games[i+x].rootPlaceId = gameDetails.rootPlaceId
+      games[i+x].playing = gameDetails.playing
+      games[i+x].favoritedCount = gameDetails.favoritedCount
+      games[i+x].visits = gameDetails.visits
+      console.log(games[i+x])
+    }
+    i += n
+  }
+  console.log(games)
+}
+
 async function getUserGames(id) {
 	let cursor = null
 	let games = []
+
 	do {
 		const gamesData = await get(`https://games.roblox.com/v2/users/${id}/games?limit=50&cursor=${cursor === null ? "" : cursor}`)
 		if (gamesData === undefined) return undefined
 		cursor = gamesData.nextPageCursor
 		games.push(...gamesData.data)
 	} while (cursor !== null);
+	await getDetailedGameData(games)
 	return games
 }
 
-/*
-[
-{
-	groupId,
-	groupName,
-	groupIsVerified,
-	groupMemberCount,
-	userRole,
-	userRank,
-	games: [
-		smae as usergames
-	]
-}
-]
-*/
 async function getGroups(id) {
-	let cursor = null
-	let groups = []
-	const groupsData = await get(`https://groups.roblox.com/v2/users/${id}/groups/roles`)
-	if (groupsData === null) return undefined
-	
-	for (const group of groupsData.data) {
-		let t = {
-			groupId: group.group.id,
-			groupName: group.group.name,
-			groupMemberCount: group.group.memberCount,
-			groupIsVerified: group.group.hasVerifiedBadge,
-			userRole: group.role.name,
-			userRank: group.role.rank
-		}
-		if (t.userRank > 1) { // don't add groups with rank 1, it means absolutely nothing
-			let cursor = null
-			do {
-				const gamesData = await get(`https://games.roblox.com/v2/groups/${t.groupId}/gamesV2?limit=50&cursor=${cursor === null ? "" : cursor}`)
-				if (gamesData === undefined) return undefined
-				cursor = gamesData.nextPageCursor
-					let games = [...gamesData.data]
-					t.games = games
-				await sleep(10)
-			} while (cursor !== null);
-		}
-		
-		groups.push(t)
-	}
+    let cursor = null;
+    let groups = [];
 
-	return groups
+	  let groupGames = [];
+
+    let count = 0
+
+    const groupsData = await get(`https://groups.roblox.com/v2/users/${id}/groups/roles`);
+    if (groupsData === null) return undefined;
+
+    // Use Promise.all to handle the groups concurrently
+    const groupPromises = groupsData.data.map(async (group) => {
+        let t = {
+            groupId: group.group.id,
+            groupName: group.group.name,
+            groupMemberCount: group.group.memberCount,
+            groupIsVerified: group.group.hasVerifiedBadge,
+            userRole: group.role.name,
+            userRank: group.role.rank
+        };
+		if (t.userRank < 10) return undefined
+		let cursor = null;
+		do {
+			const gamesData = await get(`https://games.roblox.com/v2/groups/${t.groupId}/gamesV2?limit=100&cursor=${cursor === null ? "" : cursor}`);
+			if (gamesData === undefined) return undefined;
+			cursor = gamesData.nextPageCursor;
+			let games = [...gamesData.data];
+			t.games = games;
+      groupGames.push(...games)
+      count += games.length
+		} while (cursor !== null);
+        return t; // Return the group data after processing
+    });
+
+    // Wait for all group data to resolve concurrently
+    groups = await Promise.all(groupPromises);
+
+    // Filter out undefined values in case some groups are skipped
+    groups = groups.filter(group => group !== undefined);
+
+	  await getDetailedGameData(groupGames)
+
+    console.log(count)
+
+    return groups;
 }
+
 
 async function buildData(username) {
     let t = {};
@@ -146,7 +171,6 @@ var src_default = {
 	async fetch(request, env, ctx) {
 		const url = new URL(request.url)
 		const data = await buildData(url.searchParams.get("username"))
-		console.log(data)
 		return new Response(JSON.stringify(data), {
 			headers: {"Content-Type": "application/json"}
 		})
