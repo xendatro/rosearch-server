@@ -56,34 +56,36 @@ async function getDetailedGameData(games) {
     
     while (i < games.length) {
         console.log(i, i + n);
-        
-        // Fetch both details and thumbnails concurrently
-        let detailsPromise = get(`https://games.roblox.com/v1/games?universeIds=${gameIds.slice(i, i + n).toString()}`);
-        let thumbnailsPromise = get(`https://thumbnails.roblox.com/v1/games/multiget/thumbnails?universeIds=${gameIds.slice(i, i + n).toString()}&countPerUniverse=1&defaults=true&size=768x432&format=Png&isCircular=false`);
-        
-        // Wait for both requests to complete
-        let [details, thumbnails] = await Promise.all([detailsPromise, thumbnailsPromise]);
 
-        // Process all the game details and thumbnails concurrently
-        await Promise.all(details.data.map(async (gameDetails, x) => {
-            let thumbDetails = thumbnails.data[x];
-            
-            // Update the game details and thumbnails
-            games[i + x].universeId = gameDetails.id;
-            games[i + x].rootPlaceId = gameDetails.rootPlaceId;
-            games[i + x].playing = gameDetails.playing;
-            games[i + x].favoritedCount = gameDetails.favoritedCount;
-            games[i + x].visits = gameDetails.visits;
-            games[i + x].genre = gameDetails.genre;
-            games[i + x].thumbnails = thumbDetails.thumbnails;
+        // Fetch both details and thumbnails concurrently in batches
+        const detailsPromise = get(`https://games.roblox.com/v1/games?universeIds=${gameIds.slice(i, i + n).toString()}`);
+        const thumbnailsPromise = get(`https://thumbnails.roblox.com/v1/games/multiget/thumbnails?universeIds=${gameIds.slice(i, i + n).toString()}&countPerUniverse=1&defaults=true&size=768x432&format=Png&isCircular=false`);
+        
+        // Wait for both requests to complete concurrently
+        const [details, thumbnails] = await Promise.all([detailsPromise, thumbnailsPromise]);
 
-            console.log(games[i + x]); // Log updated game data
+        // Use Promise.all to update games concurrently
+        await Promise.all(details.data.map((gameDetails, x) => {
+            const thumbDetails = thumbnails.data[x];
+
+            // Efficiently update the game details and thumbnails
+            const game = games[i + x];
+            game.universeId = gameDetails.id;
+            game.rootPlaceId = gameDetails.rootPlaceId;
+            game.playing = gameDetails.playing;
+            game.favoritedCount = gameDetails.favoritedCount;
+            game.visits = gameDetails.visits;
+            game.genre = gameDetails.genre;
+            game.thumbnails = thumbDetails.thumbnails;
+
+            return game;  // Return updated game (not strictly necessary but good for consistency)
         }));
-        
+
         // Move to the next slice of games
         i += n;
     }
 }
+
 
 
 async function getUserGames(id) {
