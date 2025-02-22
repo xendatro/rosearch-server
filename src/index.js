@@ -50,20 +50,23 @@ async function getFollowingCount(id) {
 }
 
 async function getDetailedGameData(games) {
-	let gameIds = games.map((game) => game.id)
+  let gameIds = games.map((game) => game.id)
   const n = 20
   let i = 0
   while (i < games.length) {
     console.log(i, i+n)
     let details = await get(`https://games.roblox.com/v1/games?universeIds=${gameIds.slice(i, i+n).toString()}`)
-    console.log("new iteration", details.data)
+	let thumbnails = await get(`https://thumbnails.roblox.com/v1/games/multiget/thumbnails?universeIds=${gameIds.slice(i, i+n).toString()}&countPerUniverse=1&defaults=true&size=768x432&format=Png&isCircular=false`)
     for (let x = 0; x < details.data.length; x++) {
       let gameDetails = details.data[x]
+	  let thumbDetails = thumbnails.data[x]
       games[i+x].universeId = gameDetails.id
       games[i+x].rootPlaceId = gameDetails.rootPlaceId
       games[i+x].playing = gameDetails.playing
       games[i+x].favoritedCount = gameDetails.favoritedCount
       games[i+x].visits = gameDetails.visits
+	  games[i+x].genre = gameDetails.genre
+	  games[i+x].thumbnails = thumbDetails.thumbnails
       console.log(games[i+x])
     }
     i += n
