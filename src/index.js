@@ -103,10 +103,8 @@ async function getUserGames(id) {
 async function getGroups(id) {
     let cursor = null;
     let groups = [];
-
-	  let groupGames = [];
-
-    let count = 0
+    let groupGames = [];
+    let count = 0;
 
     const groupsData = await get(`https://groups.roblox.com/v2/users/${id}/groups/roles`);
     if (groupsData === null) return undefined;
@@ -121,17 +119,20 @@ async function getGroups(id) {
             userRole: group.role.name,
             userRank: group.role.rank
         };
-		if (t.userRank < 10) return undefined
-		let cursor = null;
-		do {
-			const gamesData = await get(`https://games.roblox.com/v2/groups/${t.groupId}/gamesV2?limit=100&cursor=${cursor === null ? "" : cursor}`);
-			if (gamesData === undefined) return undefined;
-			cursor = gamesData.nextPageCursor;
-			let games = [...gamesData.data];
-			t.games = games;
-      groupGames.push(...games)
-      count += games.length
-		} while (cursor !== null);
+
+        if (t.userRank < 10) return undefined;
+
+        let cursor = null;
+        do {
+            const gamesData = await get(`https://games.roblox.com/v2/groups/${t.groupId}/gamesV2?limit=100&cursor=${cursor === null ? "" : cursor}`);
+            if (gamesData === undefined) return undefined;
+            cursor = gamesData.nextPageCursor;
+            let games = [...gamesData.data];
+            t.games = games;
+            groupGames.push(...games);
+            count += games.length;
+        } while (cursor !== null);
+
         return t; // Return the group data after processing
     });
 
@@ -141,12 +142,24 @@ async function getGroups(id) {
     // Filter out undefined values in case some groups are skipped
     groups = groups.filter(group => group !== undefined);
 
-	await getDetailedGameData(groupGames)
+    // Batch processing of group games to speed up detailed data fetching
+    const gameChunks = chunkArray(groupGames, 50); // Example: process in batches of 50
+    await Promise.all(gameChunks.map(chunk => getDetailedGameData(chunk))); // Fetch detailed game data concurrently for each batch
 
-    console.log(count)
+    console.log(count);
 
     return groups;
 }
+
+// Helper function to split an array into smaller chunks
+function chunkArray(arr, size) {
+    const result = [];
+    for (let i = 0; i < arr.length; i += size) {
+        result.push(arr.slice(i, i + size));
+    }
+    return result;
+}
+
 
 
 async function buildData(username) {
